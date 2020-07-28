@@ -1,14 +1,9 @@
-{ system ? builtins.currentSystem }:
-
+self: super:
+  
 let
-  pkgs = import <nixpkgs> { inherit system; };
-  
-  callPackage = pkgs.lib.callPackageWith (pkgs // self);
-  
-  self = {
-    mfcj200lpr = callPackage ./pkgs/mfcj200lpr { };
-    mfcj200cupswrapper = callPackage ./pkgs/mfcj200cupswrapper { };
-  };
+  callPackage = super.lib.callPackageWith self;
 in
-self
-
+{
+  mfcj200lpr = callPackage ./pkgs/mfcj200lpr.nix { };
+  mfcj200cupswrapper = callPackage ./pkgs/mfcj200cupswrapper.nix { };
+}
