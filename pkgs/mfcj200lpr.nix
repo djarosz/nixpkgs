@@ -61,10 +61,10 @@ pkgsi686Linux.stdenv.mkDerivation rec {
      sed 's#/opt/brother/Printers/%s/inf/br%src#.///////////////////////br${model}rc#' > $PATCHED
     patchelf --set-interpreter ${pkgsi686Linux.stdenv.cc.libc.out}/lib/ld-linux.so.2 $PATCHED
     chmod +x $PATCHED
-    # executing from current dir. does not apply print settings if it's not r\w.
-    echo -n "$brprintconf_script" > $FILE
-    chmod +x $FILE
-    substituteInPlace $FILE --replace @out@ $out
+    mkdir -p $out/bin
+    echo -n "$brprintconf_script" > $out/bin/brprintconf_${model}
+    chmod +x $out/bin/brprintconf_${model}
+    substituteInPlace $out/bin/brprintconf_${model} --replace @out@ $out
 
     '';
 
