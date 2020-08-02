@@ -1,9 +1,9 @@
-{ stdenv, fetchurl, cups, dpkg, pkgsi686Linux, ghostscript, a2ps, coreutils,  gnused, gawk, file, makeWrapper, which }:
+{ stdenv, fetchurl, cups, dpkg, pkgsi686Linux, ghostscript, a2ps, coreutils,  gnused, gawk, file, makeWrapper, runtimeShell }:
 
 let
   model = "mfcj200";
 in
-stdenv.mkDerivation rec {
+pkgsi686Linux.stdenv.mkDerivation rec {
   pname = "${model}lpr";
   version = "3.0.0-1";
 
@@ -13,11 +13,19 @@ stdenv.mkDerivation rec {
   };
 
   nativeBuildInputs = [ makeWrapper dpkg ];
-  buildInputs = [ cups ghostscript a2ps which gnused ];
+  buildInputs = [ cups ghostscript a2ps gnused ];
 
   dontUnpack = true;
-  dontBuild = true;
-  dontPatchELF = true;
+  nopatchElf = true;
+
+  brprintconf_script = ''
+    #!${runtimeShell}
+    cd $(mktemp -d)
+    ln -s @out@/usr/bin/brprintconf_${model}_patched brprintconf_${model}_patched
+    ln -s @out@/opt/brother/Printers/${model}/inf/br${model}func br${model}func
+    ln -s @out@/opt/brother/Printers/${model}/inf/br${model}rc br${model}rc
+    ./brprintconf_${model}_patched "$@"
+  '';
 
   installPhase = ''
     dpkg-deb -x $src $out
@@ -33,11 +41,12 @@ stdenv.mkDerivation rec {
     sed -i -e 's/^GHOST_SCRIPT=.*/GHOST_SCRIPT=gs/' $FILE
     wrapProgram $FILE \
       --run "cd $out" \
-      --prefix PATH ":" ${ stdenv.lib.makeBinPath [ gnused coreutils gawk which ] }
+      --prefix PATH ":" ${ stdenv.lib.makeBinPath [ ghostscript gnused coreutils gawk ] }
 
     FILE=$out/opt/brother/Printers/${model}/inf/setupPrintcapij
     substituteInPlace $FILE \
-      --replace /opt "$out/opt"
+      --replace /opt "$out/opt" \
+      --replace /etc/printcap.local /etc/printcap
     wrapProgram $FILE \
       --run "cd $out" \
       --prefix PATH ":" ${ stdenv.lib.makeBinPath [ gnused coreutils ] }
@@ -47,11 +56,15 @@ stdenv.mkDerivation rec {
     patchelf --set-interpreter ${pkgsi686Linux.stdenv.cc.libc.out}/lib/ld-linux.so.2 $FILE
 
     FILE=$out/usr/bin/brprintconf_${model}
-    sed -i -e 's./opt/.opt//.g' $FILE 
-    patchelf --set-interpreter ${pkgsi686Linux.stdenv.cc.libc.out}/lib/ld-linux.so.2 $FILE
-
-    mkdir -p $out/lib/cups/filter/
-    ln -s $out/opt/brother/Printers/${model}/lpd/filter${model} $out/lib/cups/filter/brother_lpdwrapper_${model}
+    PATCHED=$out/usr/bin/brprintconf_${model}_patched
+    sed 's#/opt/brother/Printers/%s/inf/br%sfunc#.///////////////////////br${model}func#' $FILE | \
+     sed 's#/opt/brother/Printers/%s/inf/br%src#.///////////////////////br${model}rc#' > $PATCHED
+    patchelf --set-interpreter ${pkgsi686Linux.stdenv.cc.libc.out}/lib/ld-linux.so.2 $PATCHED
+    chmod +x $PATCHED
+    # executing from current dir. does not apply print settings if it's not r\w.
+    echo -n "$brprintconf_script" > $FILE
+    chmod +x $FILE
+    substituteInPlace $FILE --replace @out@ $out
 
     '';
 

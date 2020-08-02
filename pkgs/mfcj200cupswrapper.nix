@@ -1,9 +1,9 @@
-{ stdenv, fetchurl, mfcj200lpr, makeWrapper, gnused, gnugrep, coreutils, dpkg }:
+{ stdenv, psutils, fetchurl, mfcj200lpr, makeWrapper, gnused, gnugrep, coreutils, dpkg, pkgsi686Linux }:
 
 let
   model = "mfcj200";
 in
-stdenv.mkDerivation rec {
+pkgsi686Linux.stdenv.mkDerivation rec {
   name = "${model}cupswrapper-${meta.version}";
 
   src = fetchurl {
@@ -14,42 +14,40 @@ stdenv.mkDerivation rec {
   nativeBuildInputs = [ dpkg makeWrapper ];
   buildInputs = [ mfcj200lpr ];
 
-  phases = [ "installPhase" ];
+  dontUnpack = true;
+  nopatchElf = true;
 
   installPhase = ''
     dpkg-deb -x $src $out
 
-    WRAPPER=$out/opt/brother/Printers/${model}/cupswrapper/cupswrapper${model}
-
-    substituteInPlace $WRAPPER \
-      --replace /opt "${mfcj200lpr}/opt" \
-      --replace /usr "${mfcj200lpr}/usr" \
-      --replace /etc "$out/etc"
-
-    substituteInPlace $WRAPPER \
-      --replace "\`cp " "\`cp -p " \
-      --replace "\`mv " "\`cp -p "
-
-    #sed -i -e '110,261!d' $WRAPPER
-    #substituteInPlace $WRAPPER \
-    #  --replace "$``{device_model``}" "Printers" \
-    #  --replace "$``{printer_model``}" "${model}" \
-    #  --replace "/opt/brother/Printers/${model}/inf/br${model}rc" \
-    #    "${mfcj200lpr}/opt/brother/Printers/${model}/inf/br${model}rc" \
-    #  --replace "/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1" \
-    #    "$out/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1" \
-    #  --replace "/usr/share/cups/model/Brother/brother_" \
-    #    "$out/opt/brother/Printers/${model}/cupswrapper/brother_"
-    wrapProgram $WRAPPER \
-      --prefix PATH ":" ${ stdenv.lib.makeBinPath [ coreutils gnused gnugrep ] }
-
     mkdir -p $out/lib/cups/filter
     mkdir -p $out/share/cups/model
-    ln $out/opt/brother/Printers/${model}/cupswrapper/cupswrapper${model} $out/lib/cups/filter
-    ln $out/opt/brother/Printers/${model}/cupswrapper/brother_${model}_printer_en.ppd  $out/share/cups/model
 
-    patchelf --set-interpreter ${stdenv.glibc}/lib/ld-linux.so.2 \
-      $out/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1
+    FILE=$out/lib/cups/filter/brother_lpdwrapper_${model}
+    cp $out/opt/brother/Printers/${model}/cupswrapper/cupswrapper${model} $FILE
+    sed -i -e '110,261!d' $FILE
+    substituteInPlace $FILE \
+      --replace "$``{device_model``}" "Printers" \
+      --replace "$``{printer_model``}" "${model}" \
+      --replace "$``{printer_name``}" "${model}" \
+      --replace "/opt/brother/Printers/${model}/lpd/filter${model}" \
+        "${mfcj200lpr}/opt/brother/Printers/${model}/lpd/filter${model}" \
+      --replace "/opt/brother/Printers/${model}/inf/br${model}rc" \
+        "${mfcj200lpr}/opt/brother/Printers/${model}/inf/br${model}rc" \
+      --replace "/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1" \
+        "$out/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1" \
+      --replace "/usr/share/cups/model/Brother/brother_" \
+        "$out/opt/brother/Printers/${model}/cupswrapper/brother_" \
+      --replace '/usr/bin/psnup' '${psutils}/bin/psnup' \
+      --replace '\$' '$' \
+      --replace '\`' '`'
+    wrapProgram $FILE \
+      --prefix PATH ":" ${stdenv.lib.makeBinPath [ coreutils gnused gnugrep ] }
+
+    ln $out/opt/brother/Printers/${model}/cupswrapper/brother_${model}_printer_en.ppd $out/share/cups/model/brother_${model}_printer_en.ppd
+
+    FILE=$out/opt/brother/Printers/${model}/cupswrapper/brcupsconfpt1
+    patchelf --set-interpreter ${pkgsi686Linux.stdenv.cc.libc.out}/lib/ld-linux.so.2 $FILE
     '';
 
   meta = {
